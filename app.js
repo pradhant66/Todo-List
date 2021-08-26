@@ -1,115 +1,149 @@
-//jshint esversion:6
+
 
 const express = require("express");
 const bodyParser = require("body-parser");
-const ejs = require("ejs");
-const lodash = require("lodash");
 const mongoose = require("mongoose");
-
-const homeStartingContent = "Lacus vel facilisis volutpat est velit egestas dui id ornare. Semper auctor neque vitae tempus quam. Sit amet cursus sit amet dictum sit amet justo. Viverra tellus in hac habitasse. Imperdiet proin fermentum leo vel orci porta. Donec ultrices tincidunt arcu non sodales neque sodales ut. Mattis molestie a iaculis at erat pellentesque adipiscing. Magnis dis parturient montes nascetur ridiculus mus mauris vitae ultricies. Adipiscing elit ut aliquam purus sit amet luctus venenatis lectus. Ultrices vitae auctor eu augue ut lectus arcu bibendum at. Odio euismod lacinia at quis risus sed vulputate odio ut. Cursus mattis molestie a iaculis at erat pellentesque adipiscing.";
-const aboutContent = "Hac habitasse platea dictumst vestibulum rhoncus est pellentesque. Dictumst vestibulum rhoncus est pellentesque elit ullamcorper. Non diam phasellus vestibulum lorem sed. Platea dictumst quisque sagittis purus sit. Egestas sed sed risus pretium quam vulputate dignissim suspendisse. Mauris in aliquam sem fringilla. Semper risus in hendrerit gravida rutrum quisque non tellus orci. Amet massa vitae tortor condimentum lacinia quis vel eros. Enim ut tellus elementum sagittis vitae. Mauris ultrices eros in cursus turpis massa tincidunt dui.";
-const contactContent = "Scelerisque eleifend donec pretium vulputate sapien. Rhoncus urna neque viverra justo nec ultrices. Arcu dui vivamus arcu felis bibendum. Consectetur adipiscing elit duis tristique. Risus viverra adipiscing at in tellus integer feugiat. Sapien nec sagittis aliquam malesuada bibendum arcu vitae. Consequat interdum varius sit amet mattis. Iaculis nunc sed augue lacus. Interdum posuere lorem ipsum dolor sit amet consectetur adipiscing elit. Pulvinar elementum integer enim neque. Ultrices gravida dictum fusce ut placerat orci nulla. Mauris in aliquam sem fringilla ut morbi tincidunt. Tortor posuere ac ut consequat semper viverra nam libero.";
-
-
-
-
-
+const _ = require("lodash");
 
 
 const app = express();
 
-app.set('view engine', 'ejs');
+// let items = ["abcd","efgh","pqrs"];
+// let workitem = [];
 
-app.use(bodyParser.urlencoded({
-  extended: true
-}));
+app.set("view engine", "ejs");
+
+app.use(bodyParser.urlencoded({extended : true}));
 app.use(express.static("public"));
 
-//let posts = [];
-mongoose.connect("mongodb://localhost:27017/blogDB", {useNewUrlParser: true});
+mongoose.connect("mongodb+srv://admin-pradhan:PRADHANT66@cluster0.nnz4z.mongodb.net/todolistDB", {useNewUrlParser: true});
 
-const postSchema = {
-  title: String,
-  content: String
+const itemsSchema = {
+  name: String
 };
 
-const Post = mongoose.model("Post", postSchema);
+const Item = mongoose.model("Item", itemsSchema);
+
+
+const item1 = new Item({
+  name: "Welcome to your todolist!"
+});
+
+const item2 = new Item({
+  name: "Hit the + button to add a new item."
+});
+
+const item3 = new Item({
+  name: "<-- Hit this to delete an item."
+});
+
+const defaultItems = [item1, item2, item3];
+
+const listSchema = {
+  name: String,
+  items: [itemsSchema]
+};
+
+const List = mongoose.model("List", listSchema);
 
 app.get("/", function(req, res) {
-  Post.find({}, function(err, posts){
-  res.render("home", {
-    homecon: homeStartingContent,
-    posts: posts
-  });
-});
 
-});
+  Item.find({}, function(err, foundItems){
 
-app.get("/about", function(req, res) {
-  res.render("about", {
-    aboutcon: aboutContent
-  });
-});
-
-app.get("/contact", function(req, res) {
-  res.render("contact", {
-    contactcon: contactContent
-  });
-});
-
-app.get("/compose", function(req, res) {
-  res.render("compose");
-});
-
-app.post("/compose", function(req, res) {
-  const post = new Post({
-    title: req.body.posttitle,
-    content: req.body.postbody
-  });
-  //posts.push(post);
-  post.save(function(err){
-    if (!err){
-        res.redirect("/");
+    if (foundItems.length === 0) {
+      Item.insertMany(defaultItems, function(err){
+        if (err) {
+          console.log(err);
+        } else {
+          console.log("Successfully savevd default items to DB.");
+        }
+      });
+      res.redirect("/");
+    } else {
+      res.render("list", {listTitle: "Today", newListItems: foundItems});
     }
   });
 
-//  res.redirect("/");
+});
+
+app.get("/:customListName", function(req, res){
+  const customListName = _.capitalize(req.params.customListName);
+
+  List.findOne({name: customListName}, function(err, foundList){
+    if (!err){
+      if (!foundList){
+        //Create a new list
+        const list = new List({
+          name: customListName,
+          items: defaultItems
+        });
+        list.save();
+        res.redirect("/" + customListName);
+      } else {
+        //Show an existing list
+
+        res.render("list", {listTitle: foundList.name, newListItems: foundList.items});
+      }
+    }
+  });
+
+
+
 });
 
 
 
-app.get("/posts/:topic", function(req, res) {
 
-  var requestedtitle = req.params.topic;
+app.post("/", function(req, res){
 
-Post.findOne({_id: requestedtitle},function(err,post){
-res.render("post",{
+  const itemName = req.body.newItem;
+  const listName = req.body.list;
 
-reqtitle : post.title,
-displaycon:post.content
+  const item = new Item({
+    name: itemName
+  });
+
+  if (listName === "Today"){
+    item.save();
+    res.redirect("/");
+  } else {
+    List.findOne({name: listName}, function(err, foundList){
+      foundList.items.push(item);
+      foundList.save();
+      res.redirect("/" + listName);
+    });
+  }
+});
+
+app.post("/delete", function(req, res){
+  const checkedItemId = req.body.checkbox;
+  const listName = req.body.listName;
+
+  if (listName === "Today") {
+    Item.findByIdAndRemove(checkedItemId, function(err){
+      if (!err) {
+        console.log("Successfully deleted checked item.");
+        res.redirect("/");
+      }
+    });
+  } else {
+    List.findOneAndUpdate({name: listName}, {$pull: {items: {_id: checkedItemId}}}, function(err, foundList){
+      if (!err){
+        res.redirect("/" + listName);
+      }
+    });
+  }
+
 
 });
 
+
+
+app.get("/about",function(req,res){
+  res.render("about");
 });
 
 
-});
-
-
-
-
-
-  
-
-
-});
-
-
-
-
-
-
-
-app.listen(3000, function() {
-  console.log("Server started on port 3000");
+app.listen(3000,function(){
+console.log("server on 3000");
 });
